@@ -1,0 +1,37 @@
+{
+  "uid": "order-tracker",
+  "title": "Order Tracker Requests",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Request counts by HTTP status",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (http_response_status_code) (order_lookup_requests_total)",
+          "legendFormat": "HTTP {{http_response_status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Errors (HTTP 4xx and 5xx)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(order_lookup_requests_total{http_response_status_code=~\"4..|5..\"}) or vector(0)"
+        }
+      ]
+    }
+  ]
+}

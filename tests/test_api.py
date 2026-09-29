@@ -33,3 +33,23 @@ def test_create_and_update_order(client):
 
 def test_missing_order(client):
     assert client.get("/api/orders/missing").status_code == 404
+
+
+def test_express_delivery_crosses_month_boundary(client):
+    with main.connect() as db:
+        db.execute(
+            "INSERT INTO orders VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "express-boundary",
+                "Morgan",
+                "Charger",
+                "express",
+                "received",
+                "2026-08-31T12:00:00+00:00",
+            ),
+        )
+
+    response = client.get("/api/orders/express-boundary")
+
+    assert response.status_code == 200
+    assert response.json()["estimated_delivery"] == "2026-09-02"

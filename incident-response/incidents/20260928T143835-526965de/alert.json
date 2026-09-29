@@ -1,0 +1,26 @@
+{
+  "annotations": {
+    "dashboard": "http://localhost:3000/d/order-tracker/order-tracker-requests",
+    "description": "One or more 5xx responses on /api/orders/{order_id} in the last 5 minutes.",
+    "summary": "HTTP 5xx on /api/orders/{order_id}"
+  },
+  "dashboardURL": "",
+  "endsAt": "0001-01-01T00:00:00Z",
+  "fingerprint": "542462b24ce82372",
+  "generatorURL": "http://localhost:3000/alerting/grafana/order-lookup-5xx/view?orgId=1",
+  "labels": {
+    "alertname": "Order lookup HTTP 5xx",
+    "grafana_folder": "Order Tracker Alerts",
+    "http_route": "/api/orders/{order_id}"
+  },
+  "orgId": 1,
+  "panelURL": "",
+  "silenceURL": "http://localhost:3000/alerting/silence/new?alertmanager=grafana&matcher=__alert_rule_uid__%3Dorder-lookup-5xx&matcher=http_route%3D%2Fapi%2Forders%2F%7Border_id%7D&orgId=1",
+  "startsAt": "2026-09-28T14:38:30Z",
+  "status": "firing",
+  "valueString": "[ var='A' labels={http_route=/api/orders/{order_id}} value=1.067301351925697 ], [ var='B' labels={http_route=/api/orders/{order_id}} value=1 ]",
+  "values": {
+    "A": 1.067301351925697,
+    "B": 1
+  }
+}

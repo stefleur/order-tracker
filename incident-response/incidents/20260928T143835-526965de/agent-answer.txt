@@ -1,0 +1,8 @@
+Resolved the live incident.
+
+- Root cause: express-order delivery dates used `datetime.replace(day=day + 2)`, raising `ValueError` at month boundaries.
+- Fix: use `placed_at + timedelta(days=2)` in [app/main.py](/mnt/c/Datatalksclub/ai-dev-tool-zoomcamp/order-tracker/app/main.py:95).
+- Regression test: added an August 31 → September 2 lookup case in [tests/test_api.py](/mnt/c/Datatalksclub/ai-dev-tool-zoomcamp/order-tracker/tests/test_api.py:38).
+- Verification: all 4 tests pass in Docker.
+- Deployment check: rebuilt and restarted only the app container. The previously failing `express-1002` lookup now returns HTTP 200 with `estimated_delivery: 2026-09-02`.
+- Existing unrelated worktree changes were preserved. No commit or push was performed.

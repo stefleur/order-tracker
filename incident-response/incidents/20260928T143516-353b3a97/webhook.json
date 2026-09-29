@@ -1,0 +1,14 @@
+{
+  "alerts": [
+    {
+      "annotations": {
+        "summary": "Test notification; no incident to fix"
+      },
+      "labels": {
+        "alertname": "ResponderTest",
+        "test": "true"
+      },
+      "status": "firing"
+    }
+  ]
+}

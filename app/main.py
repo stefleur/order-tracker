@@ -1,17 +1,54 @@
 import os
 import sqlite3
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
+from opentelemetry._logs import SeverityNumber
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import (
+    BatchLogRecordProcessor,
+    ConsoleLogRecordExporter,
+    SimpleLogRecordProcessor,
+)
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SimpleSpanProcessor
 from pydantic import BaseModel, Field
 
 
 DB_PATH = Path(os.getenv("ORDER_DB_PATH", "data/orders.db"))
 STATUSES = {"received", "preparing", "shipped", "delivered"}
+ORDER_LOOKUP_ROUTE = "/api/orders/{order_id}"
+
+resource = Resource.create({"service.name": "order-tracker"})
+trace_provider = TracerProvider(resource=resource)
+trace_provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+trace_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+tracer = trace_provider.get_tracer(__name__)
+
+metric_reader = PeriodicExportingMetricReader(
+    ConsoleMetricExporter(out=sys.__stdout__), export_interval_millis=5000
+)
+otlp_metric_reader = PeriodicExportingMetricReader(OTLPMetricExporter(), export_interval_millis=5000)
+meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader, otlp_metric_reader])
+lookup_requests = meter_provider.get_meter(__name__).create_counter(
+    "order_lookup_requests", unit="1", description="Number of order lookup HTTP requests"
+)
+
+log_provider = LoggerProvider(resource=resource)
+log_provider.add_log_record_processor(SimpleLogRecordProcessor(ConsoleLogRecordExporter()))
+log_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter()))
+lookup_logger = log_provider.get_logger(__name__)
 
 
 def connect():
@@ -55,7 +92,7 @@ def order_detail(row):
     order = as_dict(row)
     if order["priority"] == "express":
         placed_at = datetime.fromisoformat(order["created_at"])
-        estimated_at = placed_at.replace(day=placed_at.day + 2)
+        estimated_at = placed_at + timedelta(days=2)
         order["estimated_delivery"] = estimated_at.date().isoformat()
     return order
 
@@ -77,6 +114,33 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Order Tracker", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def instrument_order_lookup(request: Request, call_next):
+    path = request.url.path
+    order_id = path.removeprefix("/api/orders/")
+    if request.method != "GET" or not path.startswith("/api/orders/") or not order_id or "/" in order_id:
+        return await call_next(request)
+
+    with tracer.start_as_current_span("GET " + ORDER_LOOKUP_ROUTE) as span:
+        span.set_attribute("http.request.method", "GET")
+        span.set_attribute("http.route", ORDER_LOOKUP_ROUTE)
+        span.set_attribute("order.id", order_id)
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            return response
+        finally:
+            attributes = {"http.route": ORDER_LOOKUP_ROUTE, "http.response.status_code": status_code}
+            span.set_attribute("http.response.status_code", status_code)
+            lookup_requests.add(1, attributes)
+            lookup_logger.emit(
+                severity_number=SeverityNumber.INFO,
+                body="Order lookup completed",
+                attributes={**attributes, "order.id": order_id},
+            )
 
 
 @app.get("/")
